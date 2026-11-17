@@ -1,0 +1,65 @@
+name: Make Video
+
+on:
+  workflow_dispatch:
+    inputs:
+      topic:
+        description: "Video topic (example: Battle of Kurukshetra)"
+        required: true
+        type: string
+      minutes:
+        description: "Video length in minutes"
+        required: true
+        default: "15"
+        type: choice
+        options: ["5", "10", "15", "20"]
+      language:
+        description: "Voice-over language"
+        required: true
+        default: "English"
+        type: choice
+        options: ["English", "Hindi"]
+
+jobs:
+  script:
+    name: Write the script
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      TOPIC: ${{ inputs.topic }}
+
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install tools
+        run: pip install -r requirements.txt
+
+      - name: Write the script with Gemini
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          MINUTES: ${{ inputs.minutes }}
+          LANGUAGE: ${{ inputs.language }}
+        run: python write_script.py
+
+      - name: Save the script
+        uses: actions/upload-artifact@v7
+        with:
+          name: script
+          path: output/
+
+      - name: Tell me on Telegram
+        run: python notify.py --script-summary output/script.json
+
+      - name: Tell me if something failed
+        if: failure()
+        run: |
+          python notify.py "❌ Something failed for topic: $TOPIC — open this link and send the red error to Claude: $RUN_URL"
