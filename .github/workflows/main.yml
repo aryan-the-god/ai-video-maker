@@ -43,9 +43,11 @@ jobs:
       - name: Install tools
         run: pip install -r requirements.txt
 
-      - name: Write the script with Gemini
+      - name: Write the script with AI
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           MINUTES: ${{ inputs.minutes }}
           LANGUAGE: ${{ inputs.language }}
         run: python write_script.py
