@@ -9,6 +9,7 @@ Needs   env CF_ACCOUNT_ID, CF_API_TOKEN (GitHub Secrets)
 import base64
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -21,50 +22,83 @@ sys.stdout.reconfigure(line_buffering=True)
 
 ACCOUNT = os.environ.get("CF_ACCOUNT_ID", "").strip()
 TOKEN = os.environ.get("CF_API_TOKEN", "").strip()
-URL = f"https://api.cloudflare.com/client/v4/accounts/{ACCOUNT}/ai/run/@cf/black-forest-labs/flux-1-schnell"
+BASE = f"https://api.cloudflare.com/client/v4/accounts/{ACCOUNT}/ai/run/@cf/black-forest-labs/"
+URL_KLEIN = BASE + "flux-2-klein-4b"      # lets us choose a landscape size (multipart form)
+URL_SCHNELL = BASE + "flux-1-schnell"     # backup: always square
 HEAD = {"Authorization": f"Bearer {TOKEN}"}
+WIDTH, HEIGHT = 1280, 720
 
-# Sizes to try, best first. The first one that works is remembered for the next pictures.
-BODIES = [
-    {"steps": 6, "width": 1344, "height": 768},
-    {"steps": 6},
-    {},
+# Options to try, best first. The first one that works is remembered for the next pictures.
+OPTIONS = [
+    ("klein", None),
+    ("schnell", {"steps": 6, "width": 1344, "height": 768}),
+    ("schnell", {"steps": 6}),
+    ("schnell", {}),
 ]
 working = [None]
 last_error = [""]
 quota_hit = [False]
+used_model = [""]
+
+
+def one_request(kind, extra, prompt):
+    if kind == "klein":
+        form = {"prompt": (None, prompt), "width": (None, str(WIDTH)), "height": (None, str(HEIGHT))}
+        return requests.post(URL_KLEIN, headers=HEAD, files=form, timeout=180)
+    return requests.post(URL_SCHNELL, headers=HEAD, json=dict(extra, prompt=prompt), timeout=180)
+
+
+def read_image(r):
+    if r.headers.get("content-type", "").startswith("image"):
+        return r.content
+    b64 = (r.json().get("result") or {}).get("image")
+    return base64.b64decode(b64) if b64 else None
 
 
 def generate(prompt):
-    order = [working[0]] if working[0] is not None else range(len(BODIES))
+    order = [working[0]] if working[0] is not None else range(len(OPTIONS))
     for idx in order:
-        body = dict(BODIES[idx], prompt=prompt)
+        kind, extra = OPTIONS[idx]
         for attempt in range(1, 5):
             try:
-                r = requests.post(URL, headers=HEAD, json=body, timeout=180)
+                r = one_request(kind, extra, prompt)
             except Exception as e:
                 last_error[0] = f"network: {e}"
                 time.sleep(8)
                 continue
             if r.status_code == 200:
-                b64 = (r.json().get("result") or {}).get("image")
-                if b64:
+                try:
+                    img = read_image(r)
+                except Exception as e:
+                    img, last_error[0] = None, f"bad answer: {e}"
+                if img:
                     working[0] = idx
-                    return base64.b64decode(b64)
-                last_error[0] = "no image in answer"
+                    used_model[0] = kind
+                    return img
                 break
             text = r.text[:300]
-            last_error[0] = f"HTTP {r.status_code}: {text[:160]}"
+            last_error[0] = f"{kind} HTTP {r.status_code}: {text[:160]}"
             print(last_error[0])
             low = text.lower()
-            if r.status_code == 429 and ("neuron" in low or "daily" in low or "limit" in low and "allocation" in low):
+            if r.status_code == 429 and ("neuron" in low or "daily" in low or "allocation" in low):
                 quota_hit[0] = True
                 return None
             if r.status_code in (429, 500, 502, 503, 504):
                 time.sleep(10 * attempt)
                 continue
-            break  # 400 etc: try the next size option
+            break  # 400 etc: try the next option
     return None
+
+
+FRAMING = ("Wide establishing shot, cinematic 16:9 landscape composition, the whole environment "
+           "visible with rich detailed background (architecture, sky, scenery, objects); people "
+           "are shown small to medium-wide in the frame, full body, not a close-up.")
+
+
+def widen(shot):
+    """The pictures should be wide scenes, not face close-ups."""
+    shot = re.sub(r"(?i)\b(extreme |tight |medium )?close[- ]?up( shot)?\b", "wide shot", shot)
+    return shot
 
 
 def main():
@@ -87,7 +121,8 @@ def main():
         if path.exists() and path.stat().st_size > 5000:
             made.append(s["id"])
             continue
-        prompt = f"{s['shots'][0]}. Style: {style}. No text, no letters, no watermark."
+        prompt = (f"{FRAMING} Scene: {widen(s['shots'][0])}. Style: {style}. "
+                  "No text, no letters, no signs, no watermark.")
         print(f"Scene {s['id']}/{scenes[-1]['id']} ...")
         img = generate(prompt)
         if img is None and not quota_hit[0]:
@@ -106,7 +141,8 @@ def main():
         json.dumps({"made": made, "failed": failed}, indent=2), encoding="utf-8")
 
     mins = (time.time() - t_start) / 60
-    msg = f"🖼 Images ready: {len(made)}/{len(scenes)} (scenes {first}-{last}) in {mins:.1f} min"
+    msg = (f"🖼 Images ready: {len(made)}/{len(scenes)} (scenes {first}-{last}) in {mins:.1f} min"
+           f" | model: {used_model[0] or '-'}")
     if failed:
         msg += f"\nFailed scenes: {failed}\nLast error: {last_error[0]}"
     if quota_hit[0]:
