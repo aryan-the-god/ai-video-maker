@@ -86,8 +86,13 @@ Rules for every shot prompt (these go to an AI video model that makes 5-second c
 - Write in English, 30-60 words, as ONE continuous moment that can be filmed in 5 seconds.
 - Describe: the subject, what it is doing, the setting, the camera (e.g. slow push-in,
   aerial pan, low-angle tracking shot), and the light/time of day.
-- NEVER use a character's name alone - the video model doesn't know who that is.
-  Instead, describe the person using their fixed 'look' from the character list.
+- When a listed character appears in a shot, write the character as {Name} using the exact name
+  from the character list, for example "{Arjun} stands on a chariot". Do NOT describe their face or
+  clothes yourself: the full fixed look is inserted automatically, so the character stays the same
+  in every shot. Never write a bare name. Other people (crowds, soldiers) are described normally.
+- Camera: keep it steady with a LEVEL horizon (no tilt, no rolling camera, no handheld shake) and
+  at most one simple move (slow push-in, slow pan, slow crane up). Keep screen directions
+  consistent inside a scene (for example the same army stays on the same side of the frame).
 - No text, letters, subtitles, logos or maps with writing on screen.
 - Keep violence cinematic but non-graphic: no gore, no blood close-ups, no severed limbs.
   Prefer wide shots, silhouettes, smoke, dust, banners, faces and reactions.
@@ -162,7 +167,7 @@ about "{topic}" titled "{outline.title}".
 Full plan of the video:
 {plan}
 
-Characters and their FIXED looks (use these looks in shots, never the bare name):
+Characters and their FIXED looks (in shots write only {Name}; the look is added automatically):
 {characters}
 
 NOW WRITE CHAPTER {chapter_no}: "{chapter.title}"
@@ -186,6 +191,13 @@ Requirements:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
+def fill_looks(shot, characters):
+    """Replace {Name} in a shot with that character's exact fixed look (keeps the face consistent)."""
+    for c in characters:
+        shot = re.sub(r"\{\s*" + re.escape(c.name) + r"\s*\}", c.look.rstrip(". "), shot, flags=re.I)
+    return shot
+
 
 def main():
     topic = os.environ.get("TOPIC", "").strip()
@@ -233,6 +245,7 @@ def main():
                 continue
             if not shots:
                 shots = [narration]  # last-resort fallback
+            shots = [fill_looks(x, outline.characters) for x in shots]
             all_scenes.append({
                 "id": len(all_scenes) + 1,
                 "chapter": i,
