@@ -63,8 +63,9 @@ LAST_ERROR = [""]
 def generate(prompt, seed):
     """Returns image bytes or None. Tries a wide size first, then the default size."""
     for body in (
-        {"prompt": prompt, "steps": 6, "seed": seed, "width": 1344, "height": 768},
-        {"prompt": prompt, "steps": 6, "seed": seed},
+        {"prompt": prompt, "steps": 6, "width": 1344, "height": 768},
+        {"prompt": prompt, "steps": 6},
+        {"prompt": prompt},
     ):
         for attempt in range(1, 4):
             try:
