@@ -1,0 +1,66 @@
+name: Make Images
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Run number from the Make Video link (the long number at the end of the URL)"
+        required: true
+        type: string
+      first_scene:
+        description: "First scene number"
+        required: true
+        default: "1"
+        type: string
+      last_scene:
+        description: "Last scene number"
+        required: true
+        default: "24"
+        type: string
+
+jobs:
+  images:
+    name: Make the pictures
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+      CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v7
+
+      - name: Get the script
+        uses: actions/download-artifact@v7
+        with:
+          name: voice
+          path: output/
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install tools
+        run: pip install requests
+
+      - name: Make the pictures
+        run: python make_images.py ${{ inputs.first_scene }} ${{ inputs.last_scene }}
+
+      - name: Save the pictures
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: images-${{ inputs.first_scene }}-${{ inputs.last_scene }}
+          path: images/
+
+      - name: Tell me if it failed
+        if: failure()
+        run: |
+          python notify.py "❌ Images failed — open this link and send the red error to Claude: $RUN_URL"
