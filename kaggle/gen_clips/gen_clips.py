@@ -23,9 +23,22 @@ log = open(f"/kaggle/working/worker{idx}.log", "a", buffering=1)
 def say(*a):
     msg = f"[w{idx}] " + " ".join(str(x) for x in a); print(msg, flush=True); log.write(msg + "\n")
 
+# Load one worker at a time: two loads together can run out of CPU memory.
+marker = Path("/kaggle/working/loaded0.flag")
+if idx > 0:
+    for _ in range(90):
+        if marker.exists():
+            break
+        time.sleep(10)
 say("loading Wan2.2 on", torch.cuda.get_device_name(0))
-pipe = WanPipeline.from_pretrained("Wan-AI/Wan2.2-TI2V-5B-Diffusers", torch_dtype=torch.float16)
-pipe.enable_model_cpu_offload()
+try:
+    pipe = WanPipeline.from_pretrained("Wan-AI/Wan2.2-TI2V-5B-Diffusers", torch_dtype=torch.float16,
+                                       low_cpu_mem_usage=True)
+    pipe.enable_model_cpu_offload()
+finally:
+    if idx == 0:
+        marker.write_text("ok")
+say("model loaded")
 NEG = "blurry, low quality, text, watermark, subtitles, distorted, deformed, cartoon, extra limbs"
 done = failed = 0
 for n, j in enumerate(jobs, 1):
