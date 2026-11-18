@@ -8,7 +8,7 @@ on:
         required: true
         default: storybook
         type: choice
-        options: [storybook, painterly, cartoon]
+        options: [storybook, inkwash, painterly, cartoon]
       color:
         description: "Color"
         required: true
