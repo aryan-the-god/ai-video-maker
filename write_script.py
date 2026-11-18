@@ -34,7 +34,7 @@ sys.stdout.reconfigure(line_buffering=True)
 
 WORDS_PER_MINUTE = {"English": 150, "Hindi": 130}  # normal narration speed
 WORDS_PER_SCENE = 28          # about 10-12 seconds of voice per scene
-SHOTS_PER_SCENE = 2           # 2 video clips per scene
+SHOTS_PER_SCENE = 3           # 3 different shots per scene (each covers one part of the narration)
 PAUSE_BETWEEN_CALLS = 8       # seconds between questions; gentler on free-tier limits
 
 OUTPUT_DIR = Path("output")
@@ -91,12 +91,34 @@ Rules for every shot prompt (these go to an AI video model that makes 5-second c
 - No text, letters, subtitles, logos or maps with writing on screen.
 - Keep violence cinematic but non-graphic: no gore, no blood close-ups, no severed limbs.
   Prefer wide shots, silhouettes, smoke, dust, banners, faces and reactions.
-- The shots must match what the narration is saying at that moment.
+- The shots must match what the narration is saying at that moment, IN THE SAME ORDER: shot 1 shows
+  the first part of the narration, shot 2 the middle, shot 3 the last part.
+- The AI video model is small. It draws big, clear, simple subjects well and small things badly.
+  So prefer: landscapes, skies, crowds from far, silhouettes, buildings, fire, smoke, water, horses,
+  armies, one person in a wide or medium shot with a clear action.
+  AVOID: close-ups of small objects (conch shells, swords, rings, jewelry, coins, scrolls, weapons
+  in hands), hands doing detailed things, anything with writing. If the narration mentions such an
+  object, show the bigger scene around it instead (for example for a conch horn: warriors on a hill
+  at dawn, a loud echo rolling over the valley).
+- One shot = one simple subject and one simple movement. No lists of many things.
+- Never show a real, named living person's face or body, and never use the names, looks, logos or
+  places of copyrighted fictional worlds (film/book/game characters and locations). When the story
+  is about such a person or franchise, show ORIGINAL generic visuals instead: places, objects,
+  hands, silhouettes, crowds seen from far away, symbolic images, invented characters.
 - Do NOT include the overall visual style line; it is added automatically later.
 """
 
 
-def outline_prompt(topic, minutes, language, n_chapters):
+STYLES = {
+    "Cinematic realistic": "photorealistic cinematic film look, natural lighting, 35mm film, shallow depth of field",
+    "Game cinematic (90s crime, open-world)": ("3D video game cinematic cutscene, open-world crime game, realistic "
+        "game-engine rendering, 1990s city setting, moody golden-hour lighting, slight film grain, wide shots"),
+    "Painterly animation": "painterly 2D animated film, rich saturated colors, hand-painted backgrounds, soft cinematic lighting",
+}
+
+
+def outline_prompt(topic, minutes, language, n_chapters, style_line=""):
+    style_note = f" (it must be exactly this style: {style_line})" if style_line else ""
     return f"""You are a top YouTube documentary writer and director.
 Plan a {minutes}-minute narrated cinematic video about: "{topic}"
 
@@ -110,9 +132,13 @@ Accuracy rules:
 - Mythology: follow the traditional, widely known version of the story.
 - Mysteries: clearly separate known facts from theories.
 
+If the topic is a fictional story (for example a crime or gangster story) instead of history, tell it
+as a gripping story with invented characters and a clear beginning, middle and end. Keep violence
+non-graphic (no gore); show it through suspense, shadows and aftermath.
+
 Create:
 - a catchy title, YouTube description and tags (in {language}; tags may be mixed)
-- one visual_style line (English) that every shot will share
+- one visual_style line (English) that every shot will share{style_note}
 - the main characters (if any) with a fixed visual 'look' each (English)
 - exactly {n_chapters} chapters that tell the story from a strong hook to a satisfying ending.
   Chapter 1 must open with a hook that grabs attention in the first 15 seconds.
@@ -165,6 +191,7 @@ def main():
     topic = os.environ.get("TOPIC", "").strip()
     minutes = int(os.environ.get("MINUTES", "15") or 15)
     language = os.environ.get("LANGUAGE", "English").strip() or "English"
+    style_line = STYLES.get(os.environ.get("STYLE", "").strip(), "")
 
     if not topic:
         sys.exit("ERROR: no topic given.")
@@ -182,7 +209,9 @@ def main():
 
     # 1) Outline
     print("\n[1] Planning the video ...")
-    outline = ai.ask(outline_prompt(topic, minutes, language, n_chapters), Outline)
+    outline = ai.ask(outline_prompt(topic, minutes, language, n_chapters, style_line), Outline)
+    if style_line:
+        outline.visual_style = style_line   # use the chosen style exactly
     print(f"  Title: {outline.title}")
     print(f"  Chapters: {len(outline.chapters)} | characters: {len(outline.characters)}")
 
