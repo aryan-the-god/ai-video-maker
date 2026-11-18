@@ -74,11 +74,20 @@ say("loading video model on", torch.cuda.get_device_name(0))
 try:
     pipe = WanPipeline.from_pretrained(MODEL, text_encoder=None, tokenizer=None,
                                        torch_dtype=torch.float16, low_cpu_mem_usage=True)
-    pipe.enable_model_cpu_offload()
+    mode = "gpu"
+    try:
+        pipe.to("cuda")                 # whole model on the GPU: uses almost no CPU memory
+    except Exception as e:
+        say("could not fit on GPU, using offload:", type(e).__name__)
+        pipe.enable_model_cpu_offload(); mode = "offload"
+    try:
+        pipe.vae.enable_tiling()
+    except Exception:
+        pass
 finally:
     if idx == 0:
         marker.write_text("ok")
-say("model loaded")
+say("model loaded, mode:", mode)
 emb = torch.load("/kaggle/working/embeds.pt")
 neg = emb["__NEG__"].to("cuda")
 
@@ -102,6 +111,9 @@ for n, j in enumerate(jobs, 1):
         except Exception as e:
             say(f"{j['clip']} attempt {attempt} failed: {type(e).__name__}: {str(e)[:200]}")
             traceback.print_exc(); torch.cuda.empty_cache()
+            if "out of memory" in str(e).lower() and mode == "gpu":
+                say("GPU memory full -> switching to offload mode")
+                pipe.to("cpu"); torch.cuda.empty_cache(); pipe.enable_model_cpu_offload(); mode = "offload"
     else:
         failed += 1
 say(f"finished: {done} made, {failed} failed")
@@ -135,6 +147,14 @@ def main():
                                            str(MAX_HOURS), MODEL], env=env))
         for i, p in enumerate(procs):
             notes.append(f"worker {i} exit code: {p.wait()}  (negative = killed by the system)")
+    def missing():
+        return [j for j in jobs if not (out / "clips" / (j["clip"] + ".mp4")).exists()]
+
+    if procs and missing() and (time.time() - t0) / 3600 < MAX_HOURS - 1:
+        notes.append(f"{len(missing())} clips missing -> finishing them with one worker")
+        env = dict(os.environ, CUDA_VISIBLE_DEVICES="0")
+        p = subprocess.Popen([sys.executable, str(out / "worker.py"), "0", "1", str(MAX_HOURS), MODEL], env=env)
+        notes.append(f"cleanup worker exit code: {p.wait()}")
     (out / "launcher.log").write_text("\n".join(notes))
 
     made = sorted(x.name for x in (out / "clips").glob("*.mp4")) if (out / "clips").exists() else []
