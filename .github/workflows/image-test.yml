@@ -6,13 +6,13 @@ on:
       style:
         description: "Image style"
         required: true
-        default: illustrated
+        default: storybook
         type: choice
-        options: [illustrated, book, realistic]
+        options: [storybook, painterly, cartoon]
       color:
         description: "Color"
         required: true
-        default: vintage
+        default: colored
         type: choice
         options: [colored, vintage]
 
@@ -25,6 +25,8 @@ jobs:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+      CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
       STYLE: ${{ inputs.style }}
       COLOR: ${{ inputs.color }}
     steps:
