@@ -17,7 +17,8 @@ for sc in script["scenes"]:
         continue
     n = max(1, math.ceil(secs[sc["id"]] / CLIP_SECONDS))
     for c in range(n):
-        shot = sc["shots"][0 if c < n / 2 else min(1, len(sc["shots"]) - 1)]
+        k = len(sc["shots"])
+        shot = sc["shots"][min(k - 1, int(c * k / n))]     # shots in order, spread over the scene
         jobs.append({"clip": f"s{sc['id']:03d}_c{c+1:02d}", "seed": sc["id"] * 100 + c,
                      "prompt": f"{shot} Style: {style}. Cinematic film look, natural motion."})
 
