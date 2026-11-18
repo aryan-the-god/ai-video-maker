@@ -170,7 +170,7 @@ about "{topic}" titled "{outline.title}".
 Full plan of the video:
 {plan}
 
-Characters and their FIXED looks (in image prompts write only {Name}; the look is added automatically):
+Characters and their FIXED looks (in image prompts write only {{Name}}; the look is added automatically):
 {characters}
 
 NOW WRITE CHAPTER {chapter_no}: "{chapter.title}"
