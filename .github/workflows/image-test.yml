@@ -1,0 +1,36 @@
+name: Image Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      style:
+        description: "Image style"
+        required: true
+        default: illustrated
+        type: choice
+        options: [illustrated, book, realistic]
+      color:
+        description: "Color"
+        required: true
+        default: vintage
+        type: choice
+        options: [colored, vintage]
+
+jobs:
+  images:
+    name: Make 3 test images
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      STYLE: ${{ inputs.style }}
+      COLOR: ${{ inputs.color }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: pip install requests
+      - run: python image_test.py
