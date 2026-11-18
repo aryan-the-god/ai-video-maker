@@ -112,7 +112,12 @@ Rules for every image prompt (each goes to an AI image model that paints ONE sti
   location with the same key details each time (same hall, same colours, same time of day), and
   change only the framing and the action. When the story moves to a new place or a new character
   takes over, describe the new place fully.
-- Vary the framing between neighbouring scenes (wide, medium, close-up) so the video feels alive.
+- FRAMING: about 90% of the pictures must be WIDE shots (establishing shots) where the setting fills
+  most of the frame with rich detail (palace halls, streets, markets, fields, sky, buildings,
+  furniture, torches, crowds in the distance) and the characters are small or medium-sized, shown
+  full body. At most 1 picture in 10 may be a medium shot, and NEVER write a close-up of a face.
+  Always describe the background in detail (what is behind and around the character).
+- Do not repeat the same framing in two neighbouring scenes: change the place, angle or distance.
 - Big, clear subjects: people, buildings, landscapes, animals, fire, sky. Avoid tiny detailed
   objects, hands doing fine work, crowds of many faces, and anything with writing.
 - No text, letters, numbers, signs, subtitles, logos or watermarks in the picture.
