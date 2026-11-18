@@ -13,7 +13,7 @@ from pathlib import Path
 JOBS_JSON = r'''__JOBS__'''
 MAX_HOURS = 10.5          # stop politely before Kaggle's 12-hour limit
 MODEL = "Wan-AI/Wan2.2-TI2V-5B-Diffusers"
-NEG = "blurry, low quality, text, watermark, subtitles, distorted, deformed, cartoon, extra limbs"
+NEG = "blurry, low quality, text, watermark, subtitles, distorted, deformed, extra limbs, tilted horizon, dutch angle, rotating camera, camera roll, shaky camera"
 
 ENCODE_SRC = r'''
 import json, sys, torch
