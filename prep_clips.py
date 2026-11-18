@@ -20,7 +20,7 @@ for sc in script["scenes"]:
         k = len(sc["shots"])
         shot = sc["shots"][min(k - 1, int(c * k / n))]     # shots in order, spread over the scene
         jobs.append({"clip": f"s{sc['id']:03d}_c{c+1:02d}", "seed": sc["id"] * 100 + c,
-                     "prompt": f"{shot} Style: {style}. Cinematic film look, natural motion."})
+                     "prompt": f"{shot} Style: {style}. Cinematic film look, natural motion. Steady camera, level horizon, no tilt."})
 
 src = Path("kaggle/gen_clips/gen_clips.py")
 text = src.read_text()
