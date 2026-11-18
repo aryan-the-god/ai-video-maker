@@ -1,9 +1,9 @@
 """
 QUALITY TEST on a Kaggle GPU. For 2 prompts (a wide scene and a person) it makes:
   A) normal 480p clip
-  B) the 480p clip made sharper with an AI upscaler (Real-ESRGAN x2), then fitted to 720p
-  C) a clip made directly in 720p (slower)
-and records how long each took. Results: /kaggle/working/result.json + mp4 files.
+  B) the 480p clip made sharper with an AI upscaler (Real-ESRGAN x2, full precision), fitted to 720p
+  C) for the person only: a 480p clip with 35 steps instead of 20
+and records how long each took. (Native 720p was removed: it crashed on the T4.) Results: /kaggle/working/result.json + mp4 files.
 """
 import gc, json, subprocess, time, traceback
 from pathlib import Path
@@ -39,10 +39,10 @@ except Exception:
     pass
 
 
-def make(prompt, h, w, seed=7):
+def make(prompt, h, w, seed=7, steps=20):
     g = torch.Generator("cpu").manual_seed(seed)
     return pipe(prompt=prompt, negative_prompt=NEG, height=h, width=w, num_frames=33,
-                num_inference_steps=20, guidance_scale=5.0, generator=g).frames[0]
+                num_inference_steps=steps, guidance_scale=5.0, generator=g).frames[0]
 
 
 def to_uint8(frames):
@@ -64,13 +64,14 @@ def upscale_fn(frames480, path):
     from huggingface_hub import hf_hub_download
     from spandrel import ModelLoader
     w = hf_hub_download("ai-forever/Real-ESRGAN", "RealESRGAN_x2.pth")
-    model = ModelLoader().load_from_file(w).cuda().half().eval()
+    model = ModelLoader().load_from_file(w).cuda().float().eval()
     out = []
     for fr in to_uint8(frames480):
-        x = torch.from_numpy(fr).permute(2, 0, 1)[None].half().cuda() / 255
+        x = torch.from_numpy(fr).permute(2, 0, 1)[None].float().cuda() / 255
         with torch.no_grad():
             y = model(x)
-        y = (y.clamp(0, 1)[0].permute(1, 2, 0).float().cpu().numpy() * 255).astype(np.uint8)
+        y = torch.nan_to_num(y.float()).clamp(0, 1)[0].permute(1, 2, 0).cpu().numpy()
+        y = (y * 255).round().astype(np.uint8)
         out.append(np.asarray(Image.fromarray(y).resize((1280, 720), Image.LANCZOS)))
     export_to_video(out, str(path), fps=16)
     del model
@@ -88,8 +89,9 @@ for key, prompt in PROMPTS.items():
     if "f" in base:
         record(f"{key}: 480p + AI upscale (Real-ESRGAN) to 720p", lambda: upscale_fn(base["f"], OUT / f"{key}_B_480p_upscaled.mp4"))
 
-    def c():
-        p = OUT / f"{key}_C_720p_native.mp4"; export_to_video(make(prompt, 704, 1280), str(p), fps=16); return p.name
-    record(f"{key}: native 720p", c)
+    if key == "face":
+        def c():
+            p = OUT / "face_C_480p_35steps.mp4"; export_to_video(make(prompt, 480, 832, steps=35), str(p), fps=16); return p.name
+        record("face: 480p with 35 steps", c)
 
 print("DONE", flush=True)
