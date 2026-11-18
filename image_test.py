@@ -57,6 +57,9 @@ out.mkdir(parents=True, exist_ok=True)
 notes = []
 
 
+LAST_ERROR = [""]
+
+
 def generate(prompt, seed):
     """Returns image bytes or None. Tries a wide size first, then the default size."""
     for body in (
@@ -78,6 +81,7 @@ def generate(prompt, seed):
                     continue
                 else:
                     print(r.text[:300])
+                    LAST_ERROR[0] = f"HTTP {r.status_code}: {r.text[:200]}"
                     break
             except Exception as e:
                 print("error:", e)
@@ -96,6 +100,6 @@ for i, scene in enumerate(SCENES, 1):
         notes.append(f"scene {i}: OK in {secs:.0f}s")
         notify.send_file(path, caption=f"Scene {i} | {style} + {color} | {secs:.0f}s")
     else:
-        notes.append(f"scene {i}: FAILED in {secs:.0f}s")
+        notes.append(f"scene {i}: FAILED in {secs:.0f}s | {LAST_ERROR[0]}")
 
 notify.send_message("🖼 Image test done\n" + "\n".join(notes) + "\n" + os.environ.get("RUN_URL", ""))
