@@ -15,6 +15,9 @@ import notify
 sys.stdout.reconfigure(line_buffering=True)
 
 STYLE = {
+    "inkwash": "vintage hand-drawn book illustration, detailed pen and ink linework with "
+               "crosshatching, soft sepia watercolor wash, aged yellowed paper texture, "
+               "historical storybook look, highly detailed, natural human proportions",
     "storybook": "flat 2D digital storybook illustration for an Indian Hindi story video, "
                  "clean bold outlines, smooth cel shading, natural human proportions, "
                  "expressive faces, detailed background painting, not photorealistic",
