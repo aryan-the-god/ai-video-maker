@@ -1,0 +1,42 @@
+name: Picture Sheet
+
+on:
+  workflow_dispatch:
+    inputs:
+      images_run_id:
+        description: "Make Images run number"
+        required: true
+        type: string
+      first_scene:
+        description: "First scene number"
+        required: true
+        default: "1"
+        type: string
+      last_scene:
+        description: "Last scene number"
+        required: true
+        default: "24"
+        type: string
+
+jobs:
+  sheet:
+    name: Make numbered picture sheets
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Get the pictures
+        uses: actions/download-artifact@v7
+        with:
+          name: images-${{ inputs.first_scene }}-${{ inputs.last_scene }}
+          path: images/
+          run-id: ${{ inputs.images_run_id }}
+          github-token: ${{ github.token }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: pip install requests pillow
+      - run: python contact_sheet.py ${{ inputs.first_scene }} ${{ inputs.last_scene }}
