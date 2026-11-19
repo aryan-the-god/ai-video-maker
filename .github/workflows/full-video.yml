@@ -129,7 +129,7 @@ jobs:
       TOPIC: ${{ inputs.topic }}
       LANGUAGE: ${{ inputs.language }}
       VOICE_CHOICE: ${{ inputs.voice }}
-      ENGINE_CHOICE: Natural (Microsoft Edge voices)
+      ENGINE_CHOICE: Kokoro (open-source)
       PACE: storyteller
 
     steps:
