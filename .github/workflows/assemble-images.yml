@@ -48,12 +48,12 @@ on:
         default: "calm"
         type: choice
         options: ["calm", "dramatic", "my own file (music/bg.mp3)", "none"]
-      sfx:
-        description: "Sound effects (wind, fire, crowd, night, rain...)"
+      music_volume:
+        description: "Music volume in percent (35 = normal, lower = quieter)"
         required: true
-        default: "light"
+        default: "35"
         type: choice
-        options: ["light", "medium", "none"]
+        options: ["10", "15", "20", "25", "35", "50", "70", "100"]
 
 jobs:
   assemble:
@@ -147,7 +147,7 @@ jobs:
       - name: Join everything
         env:
           MUSIC_CHOICE: ${{ inputs.music }}
-          SFX_CHOICE: ${{ inputs.sfx }}
+          MUSIC_VOLUME: ${{ inputs.music_volume }}
         run: |
           case "$MUSIC_CHOICE" in
             calm) M=calm ;;
@@ -155,7 +155,7 @@ jobs:
             none) M=none ;;
             *) M=file ;;
           esac
-          python assemble_images.py ${{ inputs.first_scene }} ${{ inputs.last_scene }} ${{ inputs.subtitles }} $M $SFX_CHOICE
+          python assemble_images.py ${{ inputs.first_scene }} ${{ inputs.last_scene }} ${{ inputs.subtitles }} $M $MUSIC_VOLUME
 
       - name: Save the video
         uses: actions/upload-artifact@v7
