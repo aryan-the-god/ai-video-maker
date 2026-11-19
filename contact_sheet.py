@@ -1,6 +1,7 @@
 """Puts the pictures on numbered contact sheets (12 per sheet) and sends them to Telegram,
 so you can spot bad pictures and note their scene numbers.
 Usage: python contact_sheet.py FIRST LAST     (reads images/scene_XXX.jpg)"""
+import os
 import sys
 from pathlib import Path
 
@@ -33,4 +34,5 @@ for sheet_no, start in enumerate(range(0, len(files), COLS * ROWS), 1):
     out = Path(f"sheet_{sheet_no}.jpg")
     sheet.save(out, quality=88)
     notify.send_file(out, caption=f"Sheet {sheet_no}: scenes {part[0][0]}-{part[-1][0]}")
-notify.send_message("🖼 Bad pictures ke scene numbers likh ke Claude ko bhejo (ya seedha 'Make Images' mein redo_scenes mein daalo).")
+if not os.environ.get("QUIET"):
+    notify.send_message("🖼 Bad pictures ke scene numbers likh ke Claude ko bhejo (ya seedha 'Make Images' mein redo_scenes mein daalo).")
