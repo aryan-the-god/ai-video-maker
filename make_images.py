@@ -9,6 +9,7 @@ Needs   env CF_ACCOUNT_ID, CF_API_TOKEN (GitHub Secrets)
 import base64
 import json
 import os
+import random
 import re
 import sys
 import time
@@ -43,7 +44,8 @@ used_model = [""]
 
 def one_request(kind, extra, prompt):
     if kind == "klein":
-        form = {"prompt": (None, prompt), "width": (None, str(WIDTH)), "height": (None, str(HEIGHT))}
+        form = {"prompt": (None, prompt), "width": (None, str(WIDTH)), "height": (None, str(HEIGHT)),
+                "seed": (None, str(random.randint(1, 999999)))}
         return requests.post(URL_KLEIN, headers=HEAD, files=form, timeout=180)
     return requests.post(URL_SCHNELL, headers=HEAD, json=dict(extra, prompt=prompt), timeout=180)
 
@@ -92,7 +94,9 @@ def generate(prompt):
 
 FRAMING = ("Wide establishing shot, cinematic 16:9 landscape composition, the whole environment "
            "visible with rich detailed background (architecture, sky, scenery, objects); people "
-           "are shown small to medium-wide in the frame, full body, not a close-up.")
+           "are shown small to medium-wide in the frame, full body, not a close-up. Anatomically correct "
+           "people with natural faces and normal hands. Shop fronts, walls and books are blank: "
+           "no signboards, no writing, no letters of any kind.")
 
 
 def widen(shot):
@@ -109,7 +113,12 @@ def main():
     first, last = int(sys.argv[1]), int(sys.argv[2])
     script = json.loads(Path("output/script.json").read_text(encoding="utf-8"))
     style = script.get("visual_style", "")
-    scenes = [s for s in script["scenes"] if first <= s["id"] <= last]
+    redo = os.environ.get("REDO", "").strip()
+    if redo:     # remake only these scenes (a new random look each time)
+        wanted = {int(x) for x in re.split(r"[,\s]+", redo) if x.isdigit()}
+        scenes = [s for s in script["scenes"] if s["id"] in wanted]
+    else:
+        scenes = [s for s in script["scenes"] if first <= s["id"] <= last]
 
     out = Path("images")
     out.mkdir(exist_ok=True)
@@ -118,12 +127,12 @@ def main():
 
     for s in scenes:
         path = out / f"scene_{s['id']:03d}.jpg"
-        if path.exists() and path.stat().st_size > 5000:
+        if not redo and path.exists() and path.stat().st_size > 5000:
             made.append(s["id"])
             continue
         prompt = (f"{FRAMING} Scene: {widen(s['shots'][0])}. Style: {style}. "
                   "No text, no letters, no signs, no watermark.")
-        print(f"Scene {s['id']}/{scenes[-1]['id']} ...")
+        print(f"Scene {s['id']} ...")
         img = generate(prompt)
         if img is None and not quota_hit[0]:
             time.sleep(10)
@@ -141,7 +150,8 @@ def main():
         json.dumps({"made": made, "failed": failed}, indent=2), encoding="utf-8")
 
     mins = (time.time() - t_start) / 60
-    msg = (f"🖼 Images ready: {len(made)}/{len(scenes)} (scenes {first}-{last}) in {mins:.1f} min"
+    label = f"redo {sorted(wanted)}" if redo else f"scenes {first}-{last}"
+    msg = (f"🖼 Images ready: {len(made)}/{len(scenes)} ({label}) in {mins:.1f} min"
            f" | model: {used_model[0] or '-'}")
     if failed:
         msg += f"\nFailed scenes: {failed}\nLast error: {last_error[0]}"
