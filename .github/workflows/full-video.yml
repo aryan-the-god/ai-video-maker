@@ -95,9 +95,6 @@ jobs:
       - name: Tell me on Telegram
         run: python notify.py --script-summary output/script.json
 
-      - name: Send me a copy of the script
-        run: python script_copy.py
-
       - name: Tell me if something failed
         if: failure()
         run: |
