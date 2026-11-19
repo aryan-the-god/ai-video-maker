@@ -14,7 +14,7 @@ on:
         required: true
         default: "15"
         type: choice
-        options: ["5", "10", "15", "20"]
+        options: ["5", "10", "15", "20", "30"]
       language:
         description: "Voice-over language"
         required: true
@@ -95,14 +95,34 @@ jobs:
       - name: Tell me on Telegram
         run: python notify.py --script-summary output/script.json
 
+      - name: Send me a copy of the script
+        run: python script_copy.py
+
       - name: Tell me if something failed
         if: failure()
         run: |
           python notify.py "❌ Something failed for: ${TOPIC:0:60} — open this link and send the red error to Claude: $RUN_URL"
 
+  approve:
+    name: Wait for your OK on the script
+    needs: script
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: pip install requests
+      - name: Wait for your reply on Telegram
+        run: python telegram_review.py approve
+
   voice:
     name: Make the voice-over
-    needs: script
+    needs: [script, approve]
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
@@ -320,6 +340,7 @@ jobs:
     timeout-minutes: 340
     outputs:
       done: ${{ steps.check.outputs.done }}
+      resume_at: ${{ steps.check.outputs.resume_at }}
     env:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -359,11 +380,12 @@ jobs:
         id: check
         run: |
           python - <<'PY'
-          import json, os, pathlib
+          import json, os, pathlib, time
           n = len(json.load(open("output/script.json", encoding="utf-8"))["scenes"])
           have = len([p for p in pathlib.Path("images").glob("scene_*.jpg") if p.stat().st_size > 5000])
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
               f.write(f"done={'true' if have >= n else 'false'}\n")
+              f.write(f"resume_at={(int(time.time() // 86400) + 1) * 86400 + 300}\n")
           print(have, "of", n, "pictures")
           PY
 
@@ -374,6 +396,151 @@ jobs:
           name: images-b
           path: images/
 
+
+  wait6:
+    name: Wait for free limit reset (1/5, day 3)
+    needs: images_b
+    if: ${{ !cancelled() && needs.images_b.result == 'success' && needs.images_b.outputs.done != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - name: Sleep until the daily limit resets
+        env:
+          RESUME_AT: ${{ needs.images_b.outputs.resume_at }}
+        run: |
+          now=$(date +%s); left=$((RESUME_AT - now))
+          if [ $left -le 0 ]; then echo "already reset"; exit 0; fi
+          if [ $left -gt 20400 ]; then left=20400; fi
+          echo "sleeping $left s"; sleep $left
+
+  wait7:
+    name: Wait for free limit reset (2/5, day 3)
+    needs: [wait6, images_b]
+    if: ${{ !cancelled() && needs.images_b.result == 'success' && needs.images_b.outputs.done != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - name: Sleep until the daily limit resets
+        env:
+          RESUME_AT: ${{ needs.images_b.outputs.resume_at }}
+        run: |
+          now=$(date +%s); left=$((RESUME_AT - now))
+          if [ $left -le 0 ]; then echo "already reset"; exit 0; fi
+          if [ $left -gt 20400 ]; then left=20400; fi
+          echo "sleeping $left s"; sleep $left
+
+  wait8:
+    name: Wait for free limit reset (3/5, day 3)
+    needs: [wait7, images_b]
+    if: ${{ !cancelled() && needs.images_b.result == 'success' && needs.images_b.outputs.done != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - name: Sleep until the daily limit resets
+        env:
+          RESUME_AT: ${{ needs.images_b.outputs.resume_at }}
+        run: |
+          now=$(date +%s); left=$((RESUME_AT - now))
+          if [ $left -le 0 ]; then echo "already reset"; exit 0; fi
+          if [ $left -gt 20400 ]; then left=20400; fi
+          echo "sleeping $left s"; sleep $left
+
+  wait9:
+    name: Wait for free limit reset (4/5, day 3)
+    needs: [wait8, images_b]
+    if: ${{ !cancelled() && needs.images_b.result == 'success' && needs.images_b.outputs.done != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - name: Sleep until the daily limit resets
+        env:
+          RESUME_AT: ${{ needs.images_b.outputs.resume_at }}
+        run: |
+          now=$(date +%s); left=$((RESUME_AT - now))
+          if [ $left -le 0 ]; then echo "already reset"; exit 0; fi
+          if [ $left -gt 20400 ]; then left=20400; fi
+          echo "sleeping $left s"; sleep $left
+
+  wait10:
+    name: Wait for free limit reset (5/5, day 3)
+    needs: [wait9, images_b]
+    if: ${{ !cancelled() && needs.images_b.result == 'success' && needs.images_b.outputs.done != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - name: Sleep until the daily limit resets
+        env:
+          RESUME_AT: ${{ needs.images_b.outputs.resume_at }}
+        run: |
+          now=$(date +%s); left=$((RESUME_AT - now))
+          if [ $left -le 0 ]; then echo "already reset"; exit 0; fi
+          if [ $left -gt 20400 ]; then left=20400; fi
+          echo "sleeping $left s"; sleep $left
+
+  images_c:
+    name: Make the pictures (day 3)
+    needs: [images_b, wait10]
+    if: ${{ !cancelled() && needs.images_b.result == 'success' && needs.images_b.outputs.done != 'true' && needs.wait10.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    outputs:
+      done: ${{ steps.check.outputs.done }}
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+      CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v7
+
+      - name: Get the script
+        uses: actions/download-artifact@v7
+        with:
+          name: voice
+          path: output/
+
+      - name: Get the pictures made so far
+        uses: actions/download-artifact@v7
+        with:
+          name: images-b
+          path: images/
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install tools
+        run: pip install requests
+
+      - name: Make the remaining pictures
+        continue-on-error: true
+        run: python make_images.py 1 999
+
+      - name: Check how many pictures are done
+        id: check
+        run: |
+          python - <<'PY'
+          import json, os, pathlib, time
+          n = len(json.load(open("output/script.json", encoding="utf-8"))["scenes"])
+          have = len([p for p in pathlib.Path("images").glob("scene_*.jpg") if p.stat().st_size > 5000])
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"done={'true' if have >= n else 'false'}\n")
+              f.write(f"resume_at={(int(time.time() // 86400) + 1) * 86400 + 300}\n")
+          print(have, "of", n, "pictures")
+          PY
+
+      - name: Save the pictures
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: images-c
+          path: images/
+
+
       - name: Stop if pictures are still missing
         if: steps.check.outputs.done != 'true'
         run: |
@@ -382,8 +549,8 @@ jobs:
 
   assemble:
     name: Join pictures, voice, music and subtitles
-    needs: [images_a, images_b]
-    if: ${{ !cancelled() && needs.images_a.result == 'success' && (needs.images_a.outputs.done == 'true' || needs.images_b.outputs.done == 'true') }}
+    needs: [images_a, images_b, images_c]
+    if: ${{ !cancelled() && needs.images_a.result == 'success' && (needs.images_a.outputs.done == 'true' || needs.images_b.outputs.done == 'true' || needs.images_c.outputs.done == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 180
     env:
@@ -404,7 +571,7 @@ jobs:
       - name: Get the pictures
         uses: actions/download-artifact@v7
         with:
-          name: ${{ needs.images_a.outputs.done == 'true' && 'images-a' || 'images-b' }}
+          name: ${{ needs.images_a.outputs.done == 'true' && 'images-a' || (needs.images_b.outputs.done == 'true' && 'images-b' || 'images-c') }}
           path: images/
 
       - name: Set up Python
@@ -443,3 +610,63 @@ jobs:
         if: failure()
         run: |
           python notify.py "❌ Video joining failed — open this link and send the red error to Claude: $RUN_URL"
+
+  review:
+    name: Review pictures with you on Telegram
+    needs: [assemble, images_a, images_b, images_c]
+    if: ${{ !cancelled() && needs.assemble.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+      CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+      MUSIC: ${{ inputs.music }}
+      MUSIC_VOLUME: ${{ inputs.music_volume }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Get script and voice-over
+        uses: actions/download-artifact@v7
+        with:
+          name: voice
+          path: output/
+
+      - name: Get the pictures
+        uses: actions/download-artifact@v7
+        with:
+          name: ${{ needs.images_a.outputs.done == 'true' && 'images-a' || (needs.images_b.outputs.done == 'true' && 'images-b' || 'images-c') }}
+          path: images/
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install tools
+        timeout-minutes: 20
+        run: |
+          pip install requests pillow opencv-python-headless numpy
+          for i in 1 2 3; do
+            if timeout 240 sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update -qq \
+               && timeout 400 sudo apt-get -o Acquire::Retries=3 install -y -qq ffmpeg fonts-noto-core fonts-dejavu-core; then
+              break
+            fi
+            echo "apt failed (try $i), waiting 15 s"; sleep 15
+          done
+
+      - name: Wait for your picture feedback
+        run: python telegram_review.py pictures
+
+      - name: Save the final video
+        uses: actions/upload-artifact@v7
+        with:
+          name: video-final
+          path: final/
+          if-no-files-found: ignore
+
+      - name: Tell me if something failed
+        if: failure()
+        run: |
+          python notify.py "❌ Review step failed — open this link and send the red error to Claude: $RUN_URL"
