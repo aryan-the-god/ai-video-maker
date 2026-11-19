@@ -4,7 +4,7 @@ STEP 3: pictures + voice-over (+ subtitles) -> one video, with slow zoom and sof
 Folders it expects:
   output/script.json, output/voiceover.json, output/voice/scene_XXX.wav   (from Make Video)
   images/scene_001.jpg ...                                                 (from Make Images)
-Usage: python assemble_images.py FIRST_SCENE LAST_SCENE [subtitles yes|no] [music none|calm|dramatic|file] [sfx none|light|medium]
+Usage: python assemble_images.py FIRST_SCENE LAST_SCENE [subtitles yes|no] [music none|calm|dramatic|file] [music_volume_percent]
 Result: final/video.mp4
 
 How the timing works (T = dissolve length):
@@ -22,12 +22,11 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from sfx_gen import build_track, classify
 
 first, last = int(sys.argv[1]), int(sys.argv[2])
 subtitles = (sys.argv[3] if len(sys.argv) > 3 else "yes").lower() == "yes"
 music = (sys.argv[4] if len(sys.argv) > 4 else "none").lower()   # none | calm | dramatic | file
-sfx_level = (sys.argv[5] if len(sys.argv) > 5 else "none").lower()   # none | light | medium
+music_volume = float(sys.argv[5]) / 100 if len(sys.argv) > 5 else 0.35   # percent; 35 = normal
 
 FONT = "Noto Sans Devanagari"
 FPS = 24
@@ -153,7 +152,7 @@ def dissolve_join(paths, nominal, out):
 
 
 # ---- 1) one moving picture per scene ---------------------------------------------------------
-segments, secs_list, srt_entries, wavs, sfx_items = [], [], [], [], []
+segments, secs_list, srt_entries, wavs = [], [], [], []
 clock = T / 2          # the voice starts T/2 late
 for sc in script["scenes"]:
     sid = sc["id"]
@@ -169,8 +168,6 @@ for sc in script["scenes"]:
     segments.append(str(seg))
     secs_list.append(secs)
     wavs.append(voice[sid]["file"])
-
-    sfx_items.append((clock, secs, classify((sc.get("shots") or [""])[0])))
 
     lines = caption_lines(sc["narration"])
     total_chars = sum(len(x) for x in lines) or 1
@@ -229,37 +226,12 @@ elif music == "file":
     else:
         print("!! music/bg.mp3 not found, making the video without music")
 
-# soft ambient sound effects (optional)
-sfx_file = None
-if sfx_level in ("light", "medium"):
-    sfx_file = work / "sfx.wav"
-    gain = 0.6 if sfx_level == "light" else 1.0
-    if build_track(sfx_file, sfx_items, total, gain):
-        kinds = sorted({k for _, _, k in sfx_items if k})
-        print(f"sfx: {sfx_level} -> {', '.join(kinds)}")
-    else:
-        print("sfx: no scene needed a sound effect")
-        sfx_file = None
-
 cmd = ["ffmpeg", "-y", "-loglevel", "error", "-i", video_only, "-i", work / "voice.wav"]
-n_in = 2
-bg_parts = []
 if music_file:
     cmd += ["-stream_loop", "-1", "-i", music_file]
-    bg_parts.append(f"[{n_in}:a]atrim=0:{total:.2f},volume=0.35,afade=t=in:d=2,"
-                    f"afade=t=out:st={total - 3:.2f}:d=3[m]")
-    n_in += 1
-if sfx_file:
-    cmd += ["-i", sfx_file]
-    bg_parts.append(f"[{n_in}:a]atrim=0:{total:.2f},asetpts=PTS-STARTPTS[sf]")
-    n_in += 1
-if bg_parts:
-    if music_file and sfx_file:
-        bg_parts.append("[m][sf]amix=inputs=2:normalize=0[bg]")
-    else:
-        bg_parts.append(f"{'[m]' if music_file else '[sf]'}anull[bg]")
-    fc = (f"[0:v]{vf}[vout];[1:a]asplit[va][vb];" + ";".join(bg_parts) + ";"
-          "[bg][vb]sidechaincompress=threshold=0.02:ratio=8:attack=30:release=600[duck];"
+    fc = (f"[0:v]{vf}[vout];[1:a]asplit[va][vb];"
+          f"[2:a]atrim=0:{total:.2f},volume={music_volume:.3f},afade=t=in:d=2,afade=t=out:st={total - 3:.2f}:d=3[m];"
+          "[m][vb]sidechaincompress=threshold=0.02:ratio=8:attack=30:release=600[duck];"
           "[va][duck]amix=inputs=2:duration=first:normalize=0[aout]")
     cmd += ["-filter_complex", fc, "-map", "[vout]", "-map", "[aout]"]
 else:
