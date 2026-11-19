@@ -31,7 +31,7 @@ jobs:
       - name: Get the pictures
         uses: actions/download-artifact@v7
         with:
-          name: images-${{ inputs.first_scene }}-${{ inputs.last_scene }}
+          name: images
           path: images/
           run-id: ${{ inputs.images_run_id }}
           github-token: ${{ github.token }}
