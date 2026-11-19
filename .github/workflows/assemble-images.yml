@@ -72,9 +72,20 @@ jobs:
           github-token: ${{ github.token }}
 
       - name: Get the pictures (part 1)
+        id: pics1
+        continue-on-error: true
         uses: actions/download-artifact@v7
         with:
           name: images
+          path: images/
+          run-id: ${{ inputs.images_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Get the pictures (part 1, older run name)
+        if: steps.pics1.outcome == 'failure'
+        uses: actions/download-artifact@v7
+        with:
+          name: images-${{ inputs.first_scene }}-24
           path: images/
           run-id: ${{ inputs.images_run_id }}
           github-token: ${{ github.token }}
