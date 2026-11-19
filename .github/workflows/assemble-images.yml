@@ -21,6 +21,11 @@ on:
         required: true
         default: "24"
         type: string
+      fix_run_id:
+        description: "Optional: Make Images run number of a 'redo' run (fixed pictures replace the bad ones)"
+        required: false
+        default: ""
+        type: string
       subtitles:
         description: "Burn subtitles into the video?"
         required: true
@@ -58,6 +63,15 @@ jobs:
           run-id: ${{ inputs.images_run_id }}
           github-token: ${{ github.token }}
 
+      - name: Get the fixed pictures (if any)
+        if: inputs.fix_run_id != ''
+        uses: actions/download-artifact@v7
+        with:
+          name: images-fix
+          path: images/
+          run-id: ${{ inputs.fix_run_id }}
+          github-token: ${{ github.token }}
+
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
@@ -67,7 +81,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg fonts-noto-core
-          pip install requests
+          pip install requests opencv-python-headless numpy
           ls images | head -5
 
       - name: Join everything
