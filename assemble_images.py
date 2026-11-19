@@ -13,10 +13,14 @@ How the timing works (T = dissolve length):
   The voice starts T/2 late so the first picture is already visible.
 """
 import json
+import math
 import re
 import subprocess
 import sys
 from pathlib import Path
+
+import cv2
+import numpy as np
 
 first, last = int(sys.argv[1]), int(sys.argv[2])
 subtitles = (sys.argv[3] if len(sys.argv) > 3 else "yes").lower() == "yes"
@@ -24,6 +28,7 @@ subtitles = (sys.argv[3] if len(sys.argv) > 3 else "yes").lower() == "yes"
 FONT = "Noto Sans Devanagari"
 FPS = 24
 T = 1.2                 # dissolve length in seconds
+W, H = 1280, 720
 GROUP = 10              # pictures joined per ffmpeg call (keeps memory small)
 
 script = json.loads(Path("output/script.json").read_text(encoding="utf-8"))
@@ -63,31 +68,64 @@ def caption_lines(text):
     return lines
 
 
-def picture_segment(img, seconds, index, out):
-    """One picture -> a video of `seconds` with a slow zoom. The picture is fitted into 16:9;
-    if it is not 16:9 the sides are filled with a blurred copy of itself."""
+def fit_canvas(img_path):
+    """Load a picture as a 1280x720 frame. If it is not 16:9, the sides are filled with a blurred copy."""
+    img = cv2.imread(str(img_path))
+    h, w = img.shape[:2]
+    if abs(w / h - 16 / 9) < 0.06:
+        return cv2.resize(img, (W, H), interpolation=cv2.INTER_LANCZOS4)
+    bg = cv2.resize(img, (W, H), interpolation=cv2.INTER_AREA)
+    bg = cv2.GaussianBlur(bg, (0, 0), 25)
+    scale = H / h
+    fg = cv2.resize(img, (max(2, round(w * scale)), H), interpolation=cv2.INTER_AREA)
+    if fg.shape[1] > W:
+        x0 = (fg.shape[1] - W) // 2
+        return fg[:, x0:x0 + W]
+    x0 = (W - fg.shape[1]) // 2
+    bg[:, x0:x0 + fg.shape[1]] = fg
+    return bg
+
+
+def picture_segment(img_path, seconds, index, out):
+    """One picture -> a video of `seconds` with a slow, smooth zoom.
+    Each frame is drawn with sub-pixel accuracy (no stepping, so the picture does not vibrate)."""
     n = max(2, round(seconds * FPS))
-    z = 0.08
+    base = fit_canvas(img_path)
     mode = index % 3
-    if mode == 0:       # slow zoom in, centred
-        zexpr = f"1+{z}*on/{n}"
-        xexpr, yexpr = "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"
-    elif mode == 1:     # slow zoom out, centred
-        zexpr = f"1+{z}-{z}*on/{n}"
-        xexpr, yexpr = "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"
-    else:               # slow zoom in while drifting to the right
-        zexpr = f"1.05+{z / 2}*on/{n}"
-        xexpr, yexpr = f"(iw-iw/zoom)*on/{n}", "ih/2-(ih/zoom/2)"
-    vf = (
-        "split[a][b];"
-        "[a]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,boxblur=30:3[bg];"
-        "[b]scale=-2:1080[fg];"
-        "[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1,"
-        f"zoompan=z='{zexpr}':x='{xexpr}':y='{yexpr}':d=1:s=1280x720:fps={FPS},format=yuv420p"
-    )
-    run(["ffmpeg", "-y", "-loglevel", "error", "-loop", "1", "-framerate", FPS, "-t", f"{seconds:.3f}",
-         "-i", img, "-vf", vf, "-r", FPS, "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
-         "-an", out])
+    proc = subprocess.Popen(
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{W}x{H}",
+         "-r", str(FPS), "-i", "-", "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+         "-pix_fmt", "yuv420p", "-an", str(out)],
+        stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        for f in range(n):
+            p = f / (n - 1)
+            e = 0.5 - 0.5 * math.cos(math.pi * p)          # smooth start and stop
+            if mode == 0:                                  # slow zoom in
+                zoom = 1.0 + 0.08 * e
+                fx = 0.5
+            elif mode == 1:                                # slow zoom out
+                zoom = 1.08 - 0.08 * e
+                fx = 0.5
+            else:                                          # slow zoom in, drifting to the right
+                zoom = 1.05 + 0.04 * e
+                fx = 0.15 + 0.70 * e
+            ww, wh = W / zoom, H / zoom
+            x0 = (W - ww) * fx
+            y0 = (H - wh) / 2
+            s = zoom
+            m = np.float32([[s, 0, -x0 * s], [0, s, -y0 * s]])
+            frame = cv2.warpAffine(base, m, (W, H), flags=cv2.INTER_LANCZOS4,
+                                   borderMode=cv2.BORDER_REPLICATE)
+            proc.stdin.write(frame.tobytes())
+        proc.stdin.close()
+        err = proc.stderr.read().decode()
+        if proc.wait() != 0:
+            print(err[-1500:])
+            sys.exit(1)
+    except BrokenPipeError:
+        print(proc.stderr.read().decode()[-1500:])
+        sys.exit(1)
 
 
 def dissolve_join(paths, nominal, out):
