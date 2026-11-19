@@ -8,8 +8,18 @@ on:
         required: true
         type: string
       images_run_id:
-        description: "Make Images run number"
+        description: "Make Images run number (pictures, part 1)"
         required: true
+        type: string
+      images_run_id_2:
+        description: "Optional: Make Images run number for part 2 (if you made pictures on another day)"
+        required: false
+        default: ""
+        type: string
+      images_run_id_3:
+        description: "Optional: Make Images run number for part 3"
+        required: false
+        default: ""
         type: string
       first_scene:
         description: "First scene number"
@@ -19,7 +29,7 @@ on:
       last_scene:
         description: "Last scene number"
         required: true
-        default: "24"
+        default: "200"
         type: string
       fix_run_id:
         description: "Optional: Make Images run number of a 'redo' run (fixed pictures replace the bad ones)"
@@ -32,6 +42,12 @@ on:
         default: "yes"
         type: choice
         options: ["yes", "no"]
+      music:
+        description: "Background music"
+        required: true
+        default: "calm"
+        type: choice
+        options: ["calm", "dramatic", "my own file (music/bg.mp3)", "none"]
 
 jobs:
   assemble:
@@ -55,12 +71,30 @@ jobs:
           run-id: ${{ inputs.voice_run_id }}
           github-token: ${{ github.token }}
 
-      - name: Get the pictures
+      - name: Get the pictures (part 1)
         uses: actions/download-artifact@v7
         with:
-          name: images-${{ inputs.first_scene }}-${{ inputs.last_scene }}
+          name: images
           path: images/
           run-id: ${{ inputs.images_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Get the pictures (part 2)
+        if: inputs.images_run_id_2 != ''
+        uses: actions/download-artifact@v7
+        with:
+          name: images
+          path: images/
+          run-id: ${{ inputs.images_run_id_2 }}
+          github-token: ${{ github.token }}
+
+      - name: Get the pictures (part 3)
+        if: inputs.images_run_id_3 != ''
+        uses: actions/download-artifact@v7
+        with:
+          name: images
+          path: images/
+          run-id: ${{ inputs.images_run_id_3 }}
           github-token: ${{ github.token }}
 
       - name: Get the fixed pictures (if any)
@@ -85,7 +119,16 @@ jobs:
           ls images | head -5
 
       - name: Join everything
-        run: python assemble_images.py ${{ inputs.first_scene }} ${{ inputs.last_scene }} ${{ inputs.subtitles }}
+        env:
+          MUSIC_CHOICE: ${{ inputs.music }}
+        run: |
+          case "$MUSIC_CHOICE" in
+            calm) M=calm ;;
+            dramatic) M=dramatic ;;
+            none) M=none ;;
+            *) M=file ;;
+          esac
+          python assemble_images.py ${{ inputs.first_scene }} ${{ inputs.last_scene }} ${{ inputs.subtitles }} $M
 
       - name: Save the video
         uses: actions/upload-artifact@v7
