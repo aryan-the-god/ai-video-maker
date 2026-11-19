@@ -48,6 +48,12 @@ on:
         default: "calm"
         type: choice
         options: ["calm", "dramatic", "my own file (music/bg.mp3)", "none"]
+      sfx:
+        description: "Sound effects (wind, fire, crowd, night, rain...)"
+        required: true
+        default: "light"
+        type: choice
+        options: ["light", "medium", "none"]
 
 jobs:
   assemble:
@@ -132,6 +138,7 @@ jobs:
       - name: Join everything
         env:
           MUSIC_CHOICE: ${{ inputs.music }}
+          SFX_CHOICE: ${{ inputs.sfx }}
         run: |
           case "$MUSIC_CHOICE" in
             calm) M=calm ;;
@@ -139,7 +146,7 @@ jobs:
             none) M=none ;;
             *) M=file ;;
           esac
-          python assemble_images.py ${{ inputs.first_scene }} ${{ inputs.last_scene }} ${{ inputs.subtitles }} $M
+          python assemble_images.py ${{ inputs.first_scene }} ${{ inputs.last_scene }} ${{ inputs.subtitles }} $M $SFX_CHOICE
 
       - name: Save the video
         uses: actions/upload-artifact@v7
