@@ -4,7 +4,7 @@ STEP 3: pictures + voice-over (+ subtitles) -> one video, with slow zoom and sof
 Folders it expects:
   output/script.json, output/voiceover.json, output/voice/scene_XXX.wav   (from Make Video)
   images/scene_001.jpg ...                                                 (from Make Images)
-Usage: python assemble_images.py FIRST_SCENE LAST_SCENE [subtitles yes|no]
+Usage: python assemble_images.py FIRST_SCENE LAST_SCENE [subtitles yes|no] [music none|calm|dramatic|file]
 Result: final/video.mp4
 
 How the timing works (T = dissolve length):
@@ -24,6 +24,7 @@ import numpy as np
 
 first, last = int(sys.argv[1]), int(sys.argv[2])
 subtitles = (sys.argv[3] if len(sys.argv) > 3 else "yes").lower() == "yes"
+music = (sys.argv[4] if len(sys.argv) > 4 else "none").lower()   # none | calm | dramatic | file
 
 FONT = "Noto Sans Devanagari"
 FPS = 24
@@ -207,10 +208,36 @@ if subtitles:
                              for i, (a, b, txt) in enumerate(srt_entries, 1)), encoding="utf-8")
     vf += (f",subtitles={srt}:force_style='FontName={FONT},FontSize=20,Outline=2,Shadow=1,"
            f"MarginV=28,PrimaryColour=&H00FFFFFF'")
-run(["ffmpeg", "-y", "-loglevel", "error", "-i", video_only, "-i", work / "voice.wav",
-     "-vf", vf, "-map", "0:v", "-map", "1:a", "-c:v", "libx264", "-preset", "veryfast", "-crf", "21",
-     "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k", "-t", f"{total:.2f}",
-     final / "video.mp4"])
+
+# background music (optional): made here, or your own file music/bg.mp3 (or .wav)
+music_file = None
+if music in ("calm", "dramatic"):
+    from music_gen import make_music
+    music_file = work / "music.wav"
+    make_music(music_file, total + 1, music)
+    print(f"music: {music} (made here)")
+elif music == "file":
+    found = sorted(Path("music").glob("bg.*")) if Path("music").exists() else []
+    if found:
+        music_file = found[0]
+        print(f"music: {music_file}")
+    else:
+        print("!! music/bg.mp3 not found, making the video without music")
+
+cmd = ["ffmpeg", "-y", "-loglevel", "error", "-i", video_only, "-i", work / "voice.wav"]
+if music_file:
+    cmd += ["-stream_loop", "-1", "-i", music_file]
+    fc = (f"[0:v]{vf}[vout];"
+          "[1:a]asplit[va][vb];"
+          f"[2:a]atrim=0:{total:.2f},volume=0.35,afade=t=in:d=2,afade=t=out:st={total - 3:.2f}:d=3[m];"
+          "[m][vb]sidechaincompress=threshold=0.02:ratio=8:attack=30:release=600[duck];"
+          "[va][duck]amix=inputs=2:duration=first:normalize=0[aout]")
+    cmd += ["-filter_complex", fc, "-map", "[vout]", "-map", "[aout]"]
+else:
+    cmd += ["-vf", vf, "-map", "0:v", "-map", "1:a"]
+cmd += ["-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-pix_fmt", "yuv420p",
+        "-c:a", "aac", "-b:a", "160k", "-t", f"{total:.2f}", final / "video.mp4"]
+run(cmd)
 
 dur = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0",
                             str(final / "video.mp4")], capture_output=True, text=True).stdout.strip())
